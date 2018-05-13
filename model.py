@@ -21,5 +21,6 @@ class Model():
     def train(self, trainSet, maxEpoch):
         for i in range(maxEpoch):
             for k in range(len(trainSet)):
+                print(k)
                 res = self.run(trainSet[k][0])
                 self.output.updateWeights(trainSet[k][1], self.coef)

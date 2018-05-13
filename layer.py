@@ -5,27 +5,33 @@ import math
 def logistic(value):
     return 1 / (1 + math.exp(value * (-1)))
 
-def update(weights, sigma, inputs, coef):
-    for i in range(len(weights)):
-        weights[i] += coef * sigma * inputs[i]
+def update(weights, sigmas, inputs, coef):
+    weights += numpy.dot(sigmas, [inputs]) * coef
 
-def countHiddenLayerError(layer, i):
-    sigmas = [neuron['sigma'] for neuron in layer.neurons]
+def countHiddenLayerErrors(nextLayer, size):
+    sigmas = nextLayer.sigmas
+    errors = []
+    weights = numpy.transpose(nextLayer.weights)
+
+    for k in range(size):
+        unitWeights = weights[k]
+        err = numpy.dot(unitWeights, sigmas)
+        errors.append(err)
+
+    return errors
+
+
+def generateWeights(layerSize, prevLayerSize):
     weights = []
 
-    for k in range(len(layer.neurons)):
-        neuronWeights = layer.neurons[k]['weights']
-        weights.append([neuronWeights[i]])
+    for i in range(layerSize):
+        unitWeights = []
 
-    return numpy.dot(sigmas, weights)
+        for k in range(prevLayerSize):
+            unitWeight = random.uniform(-1, 1)
+            unitWeights.append(unitWeight)
 
-
-def generateWeights(prevLayerSize):
-    weights = []
-
-    for i in range(prevLayerSize):
-        weight = random.uniform(-1, 1)
-        weights.append(weight)
+        weights.append(unitWeights)
 
     return numpy.array(weights)
 
@@ -33,34 +39,12 @@ class InputLayer():
     def __init__(self, layerSize):
         self.nextLayer = None
         self.prevLayer = None
-        self.neurons = []
-
-        for i in range(layerSize):
-            neuron = {}
-            neuron['activation'] = logistic
-            self.neurons.append(neuron)
-
-
-
-
-    def size(self):
-        return len(self.neurons)
-
-
-
+        self.activation = logistic
+        self.size = layerSize
 
     def activate(self, inputs):
-        self.outputs = []
-
-        for i in range(self.size()):
-            fn = self.neurons[i]['activation']
-            result = fn(inputs[i])
-            self.outputs.append(result)
-
+        self.outputs = list(map(self.activation, inputs))
         return self.nextLayer.activate(self.outputs)
-
-
-
 
     def add(self, layer):
         self.nextLayer = layer
@@ -71,67 +55,45 @@ class Layer():
     def __init__(self, layerSize, prevLayer):
         self.nextLayer = None
         self.prevLayer = prevLayer
-        self.neurons = []
-
-        for i in range(layerSize):
-            neuron = {}
-            neuron['weights'] = generateWeights(prevLayer.size())
-            neuron['activation'] = logistic
-            self.neurons.append(neuron)
-
-
-
-
-
-    def size(self):
-        return len(self.neurons)
-
-
-
+        self.activation = logistic
+        self.size = layerSize
+        self.weights = generateWeights(layerSize, prevLayer.size)
 
     def activate(self, inputs):
-        inputs_col = [[value] for value in inputs]
-        inputs_vec = numpy.array(inputs_col)
+        inputsCol = numpy.array([[value] for value in inputs])
         self.inputs = inputs
-        self.outputs = []
-
-        for i in range(self.size()):
-            weights = self.neurons[i]['weights']
-            dot = numpy.dot(weights, inputs_vec)
-            fn = self.neurons[i]['activation']
-            result = fn(dot)
-            self.outputs.append(result)
+        dot = numpy.dot(self.weights, inputsCol)
+        self.outputs = list(map(self.activation, dot))
 
         if self.nextLayer: return self.nextLayer.activate(self.outputs)
         else: return self.outputs
 
-
-
-
     def add(self, layer):
         self.nextLayer = layer
 
-
-
     def updateWeights(self, requiredOutput, coef):
         if not self.nextLayer:
-            for i in range(len(self.neurons)):
-                error = requiredOutput[i] - self.outputs[i]
-                sigma = self.outputs[i] * (1 - self.outputs[i]) * error
-                self.neurons[i]['sigma'] = sigma
-                weights = self.neurons[i]['weights']
-                update(weights, sigma, self.inputs, coef)
+            requiredOutput = numpy.array([[val] for val in requiredOutput])
+            output = numpy.array([[val] for val in self.outputs])
+            errors = requiredOutput - output
+            self.sigmas = list(map(lambda x: x * (1 - x), self.outputs))
 
-            self.prevLayer.updateWeights(requiredOutput, coef)
+            for i in range(self.size):
+                self.sigmas[i] = [self.sigmas[i] * errors[i][0]]
+
+            update(self.weights, self.sigmas, self.inputs, coef)
+
+            if self.prevLayer.prevLayer:
+                self.prevLayer.updateWeights(requiredOutput, coef)
 
         else:
-            for i in range(len(self.neurons)):
-                error = countHiddenLayerError(self.nextLayer, i)
-                sigma = self.outputs[i] * (1 - self.outputs[i]) * error
-                self.neurons[i]['sigma'] = sigma
-                inputs = self.inputs
-                weights = self.neurons[i]['weights']
-                update(weights, sigma, inputs, coef)
+            errors = countHiddenLayerErrors(self.nextLayer, self.size)
+            self.sigmas = list(map(lambda x: x * (1 - x), self.outputs))
+
+            for i in range(self.size):
+                self.sigmas[i] = [self.sigmas[i] * errors[i][0]]
+
+            update(self.weights, self.sigmas, self.inputs, coef)
 
             if self.prevLayer.prevLayer:
                     self.prevLayer.updateWeights(requiredOutput, coef)
