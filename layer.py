@@ -5,21 +5,12 @@ import math
 def logistic(value):
     return 1 / (1 + math.exp(value * (-1)))
 
-def update(weights, sigmas, inputs, coef):
-    weights += numpy.dot(sigmas, [inputs]) * coef
 
 def countHiddenLayerErrors(nextLayer, size):
     sigmas = nextLayer.sigmas
-    errors = []
     weights = numpy.transpose(nextLayer.weights)
-
-    for k in range(size):
-        unitWeights = weights[k]
-        err = numpy.dot(unitWeights, sigmas)
-        errors.append(err)
-
+    errors = numpy.dot(weights, sigmas)
     return errors
-
 
 def generateWeights(layerSize, prevLayerSize):
     weights = []
@@ -39,31 +30,31 @@ class InputLayer():
     def __init__(self, layerSize):
         self.nextLayer = None
         self.prevLayer = None
+        self.activationType = 'logistic'
         self.activation = logistic
         self.size = layerSize
 
     def activate(self, inputs):
-        self.outputs = list(map(self.activation, inputs))
+        self.outputs = [self.activation(val) for val in inputs]
         return self.nextLayer.activate(self.outputs)
 
     def add(self, layer):
         self.nextLayer = layer
 
-
-
 class Layer():
     def __init__(self, layerSize, prevLayer):
         self.nextLayer = None
         self.prevLayer = prevLayer
+        self.activationType = 'logistic'
         self.activation = logistic
         self.size = layerSize
         self.weights = generateWeights(layerSize, prevLayer.size)
 
     def activate(self, inputs):
-        inputsCol = numpy.array([[value] for value in inputs])
-        self.inputs = inputs
+        inputsCol = numpy.transpose([inputs])
+        self.inputs = [inputs]
         dot = numpy.dot(self.weights, inputsCol)
-        self.outputs = list(map(self.activation, dot))
+        self.outputs = [self.activation(row[0]) for row in dot]
 
         if self.nextLayer: return self.nextLayer.activate(self.outputs)
         else: return self.outputs
@@ -71,29 +62,31 @@ class Layer():
     def add(self, layer):
         self.nextLayer = layer
 
+    def setWeights(self, weights):
+        self.weights = numpy.array(weights)
+
     def updateWeights(self, requiredOutput, coef):
         if not self.nextLayer:
-            requiredOutput = numpy.array([[val] for val in requiredOutput])
-            output = numpy.array([[val] for val in self.outputs])
-            errors = requiredOutput - output
-            self.sigmas = list(map(lambda x: x * (1 - x), self.outputs))
+            requiredOutput = numpy.transpose([requiredOutput])
+            errors = requiredOutput - numpy.transpose([self.outputs])
+            constants = [val * (1 - val) for val in self.outputs]
+            dot = numpy.dot(errors, [constants])
+            diagonal = [numpy.diagonal(dot)]
+            self.sigmas = numpy.transpose(diagonal)
 
-            for i in range(self.size):
-                self.sigmas[i] = [self.sigmas[i] * errors[i][0]]
-
-            update(self.weights, self.sigmas, self.inputs, coef)
+            self.weights = self.weights + numpy.dot(self.sigmas, self.inputs) * coef
 
             if self.prevLayer.prevLayer:
-                self.prevLayer.updateWeights(requiredOutput, coef)
+                self.prevLayer.updateWeights(None, coef)
 
         else:
             errors = countHiddenLayerErrors(self.nextLayer, self.size)
-            self.sigmas = list(map(lambda x: x * (1 - x), self.outputs))
+            constants = [val * (1 - val) for val in self.outputs]
+            dot = numpy.dot(errors, [constants])
+            diagonal = [numpy.diagonal(dot)]
+            self.sigmas = numpy.transpose(diagonal)
 
-            for i in range(self.size):
-                self.sigmas[i] = [self.sigmas[i] * errors[i][0]]
-
-            update(self.weights, self.sigmas, self.inputs, coef)
+            self.weights = self.weights + numpy.dot(self.sigmas, self.inputs) * coef
 
             if self.prevLayer.prevLayer:
-                    self.prevLayer.updateWeights(requiredOutput, coef)
+                    self.prevLayer.updateWeights(None, coef)
